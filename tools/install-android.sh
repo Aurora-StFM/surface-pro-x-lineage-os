@@ -1,23 +1,35 @@
 #!/usr/bin/env bash
-# Install or update LineageOS on the Surface Pro X, next to Windows and Fedora.
+# Install or update LineageOS on the Surface Pro X internal drive.
 #
-# Run ON THE SURFACE, from Fedora, as root, in the directory made by
-# "build.sh images" (it holds super.img, ramdisk.img, Image and the DTB):
+# Run ON THE SURFACE as root, in the directory made by "build.sh images"
+# (it holds super.img, ramdisk.img, Image and the DTB), from either:
+#   - Fedora installed on the internal drive (the Fedora port), or
+#   - a Linux system booted from USB (the Fedora port's USB image), for a
+#     Surface with only Windows, or with nothing you want to keep.
 #
-#   sudo ./install-android.sh                 first install, or update if present
-#   sudo ./install-android.sh --dry-run       show what would happen, change nothing
-#   sudo ./install-android.sh --wipe-data     update and erase Android's user data
-#   sudo ./install-android.sh --data-size 64G size of Android's data partition
-#                                             (default: all the free space used)
-#   sudo ./install-android.sh --uninstall     remove the boot entry and files
+#   sudo ./install-android.sh                  install, or update if present
+#   sudo ./install-android.sh --dry-run        show what would happen, change nothing
+#   sudo ./install-android.sh --erase-disk     from USB only: ERASE the whole drive
+#                                              (Windows and everything else) and give
+#                                              it to Android
+#   sudo ./install-android.sh --wipe-data      update and erase Android's user data
+#   sudo ./install-android.sh --data-size 64G  size of Android's data partition
+#                                              (default: all the free space)
+#   sudo ./install-android.sh --disk /dev/nvme0n1   drive to use (default: the
+#                                              internal NVMe drive)
+#   sudo ./install-android.sh --uninstall      remove the boot entry and boot files
 #
-# First install: creates four partitions (misc, metadata, super, userdata) in
-# the largest block of UNALLOCATED space on the internal drive. It never
+# Without --erase-disk the installer creates its partitions (misc, metadata,
+# super, userdata) in the largest block of UNALLOCATED space and never
 # resizes, moves or deletes a partition. Make room first (shrink Windows or
-# Fedora with their own tools), then run this.
+# Fedora with their own tools).
 #
-# Booting: adds a GRUB entry "LineageOS (Surface Pro X)" next to Fedora's.
-# Boot it once with: sudo grub2-reboot lineage-spx && sudo reboot
+# Booting:
+#   - From installed Fedora: adds a GRUB entry next to Fedora's.
+#     Boot it once with: sudo grub2-reboot lineage-spx && sudo reboot
+#   - From USB: installs systemd-boot on the drive's EFI system partition and
+#     makes it the first UEFI boot entry. Its menu lists LineageOS and, if
+#     present, Windows.
 set -euo pipefail
 
 ENTRY_ID=lineage-spx
@@ -26,23 +38,28 @@ DTB=sc8180x-surface-pro-x.dtb
 NAMES=(misc metadata super userdata)
 MISC_MIB=1
 METADATA_MIB=64
+ESP_MIB=512
 MIN_DATA_GIB=8
+ESP_TYPE=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+EFI_LABEL="LineageOS (Surface Pro X)"
+SDBOOT_SRC=/usr/lib/systemd/boot/efi/systemd-bootaa64.efi
 
 msg()  { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 msg2() { printf '\033[1;34m  ->\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-DRY=0 WIPE=0 YES=0 UNINSTALL=0 DATA_SIZE="" DISK=""
+DRY=0 WIPE=0 YES=0 UNINSTALL=0 ERASE=0 DATA_SIZE="" DISK=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --dry-run) DRY=1; shift ;;
         --wipe-data) WIPE=1; shift ;;
+        --erase-disk) ERASE=1; shift ;;
         --yes) YES=1; shift ;;
         --uninstall) UNINSTALL=1; shift ;;
         --data-size) DATA_SIZE="$2"; shift 2 ;;
         --disk) DISK="$2"; shift 2 ;;
-        -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
         *) die "unknown argument: $1" ;;
     esac
 done
@@ -52,40 +69,97 @@ run() { # run CMD...: print, and execute unless --dry-run
     [ "$DRY" = 1 ] || "$@"
 }
 
-confirm() {
-    [ "$YES" = 1 ] && return 0
+confirm() { # confirm QUESTION [WORD]: the user must type WORD (default "yes")
+    local word="${2:-yes}" answer
     [ "$DRY" = 1 ] && return 0
-    local answer
-    read -r -p "$1 Type 'yes' to continue: " answer
-    [ "$answer" = yes ] || die "cancelled"
+    [ "$YES" = 1 ] && [ "$word" = yes ] && return 0
+    read -r -p "$1 Type '$word' to continue: " answer
+    [ "$answer" = "$word" ] || die "cancelled"
 }
 
 [ "$(id -u)" -eq 0 ] || die "run this with sudo"
 grep -qa 'microsoft,surface-pro-x' /sys/firmware/devicetree/base/compatible 2>/dev/null ||
-    die "this does not look like a Surface Pro X running Fedora with the Surface Pro X device tree"
+    die "this does not look like a Surface Pro X booted with the Surface Pro X device tree"
 
-# --- Boot files location -------------------------------------------------
-# Fedora's GRUB reads entries from /boot/loader/entries. Paths in an entry are
-# relative to the file system that holds /boot.
-BOOT_MNT="$(findmnt -no TARGET --target /boot)"
-if [ "$BOOT_MNT" = /boot ]; then PREFIX=""; else PREFIX="/boot"; fi
-ENTRY_FILE="/boot/loader/entries/$ENTRY_ID.conf"
-[ -d /boot/loader/entries ] || die "/boot/loader/entries not found (is this Fedora with GRUB and BLS?)"
+# --- Target drive and boot method ------------------------------------------
+root_src="$(findmnt -no SOURCE / | sed 's/\[.*\]$//')"
+ROOT_DISK=""
+if [ -b "$root_src" ]; then
+    pk="$(lsblk -no PKNAME "$root_src" 2>/dev/null | head -n1)"
+    [ -n "$pk" ] && ROOT_DISK="/dev/$pk"
+fi
+if [ -z "$DISK" ]; then
+    case "$ROOT_DISK" in
+        /dev/nvme*) DISK="$ROOT_DISK" ;;
+        *) DISK=/dev/nvme0n1 ;;
+    esac
+fi
+[ -b "$DISK" ] || die "$DISK is not a block device (use --disk /dev/nvme0n1)"
+case "$DISK" in /dev/nvme*) ;; *) die "$DISK is not the internal NVMe drive; Android only boots from it" ;; esac
+SECTOR="$(blockdev --getss "$DISK")"
 
+# GRUB mode: running from Fedora on the same drive. Otherwise (USB) the
+# installer brings its own boot manager, systemd-boot, on the drive's ESP.
+if [ "$ROOT_DISK" = "$DISK" ]; then
+    BOOT_MODE=grub
+    [ "$ERASE" = 1 ] && die "--erase-disk would erase the system you are running; boot from USB to use it"
+    [ -d /boot/loader/entries ] || die "/boot/loader/entries not found (is this Fedora with GRUB and BLS?)"
+else
+    BOOT_MODE=systemd-boot
+fi
+
+part_by_name() { # print /dev/... of the partition on $DISK with this GPT name
+    lsblk -rno PATH,PARTLABEL "$DISK" | awk -v n="$1" '$2 == n { print $1 }'
+}
+esp_part() { # print /dev/... of the EFI system partition on $DISK
+    lsblk -rno PATH,PARTTYPE "$DISK" | awk -v t="$ESP_TYPE" 'tolower($2) == t { print $1; exit }'
+}
+
+ESP_MNT=""
+mount_esp() { # mount the ESP (if not mounted) and set ESP_MNT
+    local esp
+    esp="$(esp_part)"
+    [ -n "$esp" ] || die "no EFI system partition on $DISK"
+    ESP_MNT="$(findmnt -rno TARGET "$esp" | head -n1)"
+    if [ -z "$ESP_MNT" ]; then
+        ESP_MNT="$(mktemp -d)"
+        mount "$esp" "$ESP_MNT"
+        trap 'umount "$ESP_MNT" 2>/dev/null; rmdir "$ESP_MNT" 2>/dev/null' EXIT
+    fi
+}
+
+# --- Uninstall --------------------------------------------------------------
 if [ "$UNINSTALL" = 1 ]; then
-    msg "Removing the boot entry and boot files"
-    run rm -f "$ENTRY_FILE"
-    run rm -rf "/boot/$BOOT_SUBDIR"
+    msg "Removing LineageOS boot entries and boot files"
+    if [ "$BOOT_MODE" = grub ]; then
+        run rm -f "/boot/loader/entries/$ENTRY_ID.conf"
+        run rm -rf "/boot/$BOOT_SUBDIR"
+    else
+        mount_esp
+        run rm -f "$ESP_MNT/loader/entries/$ENTRY_ID.conf"
+        run rm -rf "${ESP_MNT:?}/$BOOT_SUBDIR"
+        if command -v efibootmgr >/dev/null; then
+            for n in $(efibootmgr | awk -v l="$EFI_LABEL" 'index($0, l) { sub(/^Boot/, "", $1); sub(/\*$/, "", $1); print $1 }'); do
+                run efibootmgr -q -b "$n" -B
+            done
+        fi
+        msg2 "systemd-boot itself stays in EFI/systemd on the ESP (harmless; delete it if you like)"
+    fi
     msg "Done. The Android partitions were left alone. To delete them, use"
-    msg2 "GNOME Disks/KDE Partition Manager, or: sgdisk -d <number> <disk> for each of: ${NAMES[*]}"
+    msg2 "GNOME Disks/KDE Partition Manager, or: sgdisk -d <number> $DISK for each of: ${NAMES[*]}"
     exit 0
 fi
 
-for c in sgdisk partprobe udevadm mkfs.ext4 lsblk blockdev dd sha256sum findmnt; do
-    command -v "$c" >/dev/null || die "missing $c (sudo dnf install gdisk parted e2fsprogs util-linux)"
+for c in sgdisk partprobe udevadm mkfs.ext4 lsblk blockdev dd sha256sum findmnt numfmt; do
+    command -v "$c" >/dev/null || die "missing $c (sudo dnf install gdisk parted e2fsprogs util-linux coreutils)"
 done
+if [ "$BOOT_MODE" = systemd-boot ]; then
+    [ -f "$SDBOOT_SRC" ] && command -v efibootmgr >/dev/null ||
+        die "booting from USB needs systemd-boot and efibootmgr: sudo dnf install systemd-boot-unsigned efibootmgr"
+    [ "$ERASE" = 1 ] && { command -v mkfs.vfat >/dev/null || die "missing mkfs.vfat (sudo dnf install dosfstools)"; }
+fi
 
-# --- Images ----------------------------------------------------------------
+# --- Images ------------------------------------------------------------------
 IMG_DIR="$(cd "$(dirname "$0")" && pwd)"
 for f in super.img ramdisk.img Image "$DTB" SHA256SUMS; do
     [ -f "$IMG_DIR/$f" ] || die "$IMG_DIR/$f is missing; run this from the directory build.sh images made"
@@ -104,20 +178,9 @@ else
     SUPER_BYTES="$(stat -c %s "$IMG_DIR/super.img")"
 fi
 msg2 "super image: $((SUPER_BYTES / 1048576)) MiB$([ "$SUPER_SPARSE" = 1 ] && echo ' (sparse)')"
+msg2 "target drive: $DISK ($(numfmt --to=iec "$(blockdev --getsize64 "$DISK")")), boot via $BOOT_MODE"
 
-# --- Disk ------------------------------------------------------------------
-if [ -z "$DISK" ]; then
-    root_src="$(findmnt -no SOURCE / | sed 's/\[.*\]$//')"
-    DISK="/dev/$(lsblk -no PKNAME "$root_src" | head -n1)"
-fi
-[ -b "$DISK" ] || die "$DISK is not a block device (use --disk /dev/nvme0n1)"
-case "$DISK" in /dev/nvme*) ;; *) die "$DISK is not the internal NVMe drive; Android only supports booting from it" ;; esac
-SECTOR="$(blockdev --getss "$DISK")"
-
-part_by_name() { # print /dev/... of the partition on $DISK with this GPT name
-    lsblk -rno PATH,PARTLABEL "$DISK" | awk -v n="$1" '$2 == n { print $1 }'
-}
-
+# --- Install or update? --------------------------------------------------------
 found=0
 for n in "${NAMES[@]}"; do
     count="$(part_by_name "$n" | wc -l)"
@@ -125,19 +188,46 @@ for n in "${NAMES[@]}"; do
     [ "$count" -eq 1 ] && found=$((found + 1))
 done
 
-if [ "$found" -eq 0 ]; then
+if [ "$ERASE" = 1 ]; then
     MODE=install
+elif [ "$found" -eq 0 ]; then
+    MODE=install
+    if [ "$BOOT_MODE" = systemd-boot ] && [ -z "$(esp_part)" ]; then
+        die "$DISK has no EFI system partition; use --erase-disk to set the drive up from scratch"
+    fi
 elif [ "$found" -eq "${#NAMES[@]}" ]; then
     MODE=update
 else
     die "only some of the Android partitions (${NAMES[*]}) exist on $DISK; fix that by hand first"
 fi
 
-# --- Create partitions (first install) ---------------------------------------
+for p in $(lsblk -rno PATH "$DISK" | tail -n +2); do
+    if [ "$ERASE" = 1 ] && findmnt -rno TARGET "$p" >/dev/null; then
+        die "$p is mounted; unmount everything on $DISK before --erase-disk"
+    fi
+done
+
+# --- Partitions (install) -------------------------------------------------------
 if [ "$MODE" = install ]; then
-    msg "First install: looking for unallocated space on $DISK"
-    first="$(sgdisk -F "$DISK" | tail -n1)"
-    last="$(sgdisk -E "$DISK" | tail -n1)"
+    lsblk -o NAME,SIZE,FSTYPE,PARTLABEL,MOUNTPOINTS "$DISK"
+    if [ "$ERASE" = 1 ]; then
+        msg "ERASING $DISK: every partition on it (Windows, recovery, Fedora, data) will be destroyed"
+        confirm "Really erase all of $DISK?" "$(basename "$DISK")"
+        run sgdisk --zap-all "$DISK"
+        run sgdisk --clear "$DISK"
+        run partprobe "$DISK"
+        [ "$DRY" = 1 ] || udevadm settle
+    fi
+
+    msg "Looking for unallocated space on $DISK"
+    if [ "$ERASE" = 1 ] && [ "$DRY" = 1 ]; then
+        # The drive was not really cleared; plan as if it were empty.
+        first=2048
+        last=$(( $(blockdev --getsz "$DISK") * 512 / SECTOR - 34 ))
+    else
+        first="$(sgdisk -F "$DISK" | tail -n1)"
+        last="$(sgdisk -E "$DISK" | tail -n1)"
+    fi
     [[ "$first" =~ ^[0-9]+$ && "$last" =~ ^[0-9]+$ && "$last" -gt "$first" ]] ||
         die "no unallocated space on $DISK; shrink Windows or Fedora first"
     align=$((1048576 / SECTOR))
@@ -145,40 +235,44 @@ if [ "$MODE" = install ]; then
     free_bytes=$(( (last - start + 1) * SECTOR ))
 
     mib() { echo $(( $1 * 1048576 / SECTOR )); }
-    misc_sec="$(mib $MISC_MIB)"
-    meta_sec="$(mib $METADATA_MIB)"
+    LAYOUT=()
+    [ "$ERASE" = 1 ] && LAYOUT+=(esp)
+    LAYOUT+=("${NAMES[@]}")
     super_sec=$(( (SUPER_BYTES + 1048575) / 1048576 * 1048576 / SECTOR ))
-    fixed=$(( (misc_sec + meta_sec + super_sec) * SECTOR ))
+    fixed_sec=$(( $(mib $MISC_MIB) + $(mib $METADATA_MIB) + super_sec ))
+    [ "$ERASE" = 1 ] && fixed_sec=$(( fixed_sec + $(mib $ESP_MIB) ))
     if [ -n "$DATA_SIZE" ]; then
         data_bytes="$(numfmt --from=iec "${DATA_SIZE%B}")"
     else
-        data_bytes=$(( free_bytes - fixed ))
+        data_bytes=$(( free_bytes - fixed_sec * SECTOR ))
     fi
     data_sec=$(( data_bytes / 1048576 * 1048576 / SECTOR ))
     [ "$data_sec" -ge "$(mib $((MIN_DATA_GIB * 1024)))" ] ||
-        die "not enough room: $((free_bytes / 1073741824)) GiB free, Android needs $(( fixed / 1073741824 + MIN_DATA_GIB )) GiB or more"
-    [ $(( (misc_sec + meta_sec + super_sec + data_sec) * SECTOR )) -le "$free_bytes" ] ||
+        die "not enough room: $((free_bytes / 1073741824)) GiB free, Android needs $(( fixed_sec * SECTOR / 1073741824 + MIN_DATA_GIB )) GiB or more"
+    [ $(( (fixed_sec + data_sec) * SECTOR )) -le "$free_bytes" ] ||
         die "--data-size $DATA_SIZE does not fit in the $((free_bytes / 1073741824)) GiB of free space"
 
-    msg "Plan for $DISK (largest free block: $((free_bytes / 1073741824)) GiB)"
+    msg "Plan for $DISK (free block: $((free_bytes / 1073741824)) GiB)"
     s=$start
     PLAN=()
-    for n in "${NAMES[@]}"; do
+    for n in "${LAYOUT[@]}"; do
         case "$n" in
-            misc) len=$misc_sec ;; metadata) len=$meta_sec ;;
-            super) len=$super_sec ;; userdata) len=$data_sec ;;
+            esp) len=$(mib $ESP_MIB); type=ef00; name="EFI system partition" ;;
+            misc) len=$(mib $MISC_MIB); type=8300; name=$n ;;
+            metadata) len=$(mib $METADATA_MIB); type=8300; name=$n ;;
+            super) len=$super_sec; type=8300; name=$n ;;
+            userdata) len=$data_sec; type=8300; name=$n ;;
         esac
         e=$(( s + len - 1 ))
-        printf '    %-9s %10s  sectors %s-%s\n' "$n" "$(numfmt --to=iec $((len * SECTOR)))" "$s" "$e"
-        PLAN+=("-n" "0:$s:$e" "-t" "0:8300" "-c" "0:$n")
+        printf '    %-21s %10s  sectors %s-%s\n' "$name" "$(numfmt --to=iec $((len * SECTOR)))" "$s" "$e"
+        PLAN+=("-n" "0:$s:$e" "-t" "0:$type" "-c" "0:$name")
         s=$(( e + 1 ))
     done
-    echo "    Existing partitions are not touched."
-    lsblk -o NAME,SIZE,FSTYPE,PARTLABEL,MOUNTPOINTS "$DISK"
-    confirm "Create these partitions on $DISK?"
+    [ "$ERASE" = 1 ] || echo "    Existing partitions are not touched."
+    [ "$ERASE" = 1 ] || confirm "Create these partitions on $DISK?"
     run sgdisk "${PLAN[@]}" "$DISK"
     run partprobe "$DISK"
-    run udevadm settle
+    [ "$DRY" = 1 ] || udevadm settle
     WIPE=1
 fi
 
@@ -190,7 +284,7 @@ fi
 declare -A DEV
 for n in "${NAMES[@]}"; do
     DEV[$n]="$(part_by_name "$n")"
-    [ -b "${DEV[$n]}" ] || die "partition '$n' not found after creating it"
+    [ -b "${DEV[$n]}" ] || die "partition '$n' not found"
     findmnt -rno TARGET "${DEV[$n]}" >/dev/null && die "${DEV[$n]} ($n) is mounted; unmount it first"
 done
 
@@ -203,7 +297,7 @@ if [ "$MODE" = update ]; then
     confirm "Write the new system to ${DEV[super]}$([ "$WIPE" = 1 ] && echo " and erase ${DEV[userdata]}")?"
 fi
 
-# --- Write --------------------------------------------------------------------
+# --- Write ------------------------------------------------------------------------
 msg "Writing the system (super) partition"
 if [ "$SUPER_SPARSE" = 1 ]; then
     run simg2img "$IMG_DIR/super.img" "${DEV[super]}"
@@ -220,13 +314,12 @@ if [ "$WIPE" = 1 ]; then
     # when it finds the start of the partition empty.
     run dd if=/dev/zero of="${DEV[userdata]}" bs=1M count=64 conv=fsync status=none
 fi
+if [ "$ERASE" = 1 ]; then
+    run mkfs.vfat -F 32 -n ESP "$(esp_part)"
+fi
 run sync
 
-# --- Boot entry -----------------------------------------------------------------
-msg "Installing boot files to /boot/$BOOT_SUBDIR"
-run mkdir -p "/boot/$BOOT_SUBDIR"
-run install -m644 "$IMG_DIR/Image" "$IMG_DIR/ramdisk.img" "$IMG_DIR/$DTB" "/boot/$BOOT_SUBDIR/"
-
+# --- Kernel command line ------------------------------------------------------------
 # Android names block devices under /dev/block/by-name only for the storage
 # controllers listed in androidboot.boot_devices: here the PCIe controller of
 # the NVMe drive, e.g. "soc@0/1c18000.pcie".
@@ -242,8 +335,8 @@ done
 [ -n "$BOOT_DEVICES" ] || die "could not find the NVMe controller's platform device in $syspath"
 msg2 "androidboot.boot_devices=$BOOT_DEVICES"
 
-# A stable serial number for adb, derived from this Fedora install.
-SERIAL="spx$(sha256sum /etc/machine-id | cut -c1-12)"
+# A stable serial number for adb, derived from the drive's partition table ID.
+SERIAL="spx$(blkid -s PTUUID -o value "$DISK" | tr -d '-' | cut -c1-12)"
 
 KARGS="efi=novamap clk_ignore_unused"
 [ -r /etc/surface-pro-x/kernel-args ] && KARGS="$(tr '\n' ' ' < /etc/surface-pro-x/kernel-args)"
@@ -253,7 +346,24 @@ OPTIONS="$OPTIONS androidboot.selinux=permissive androidboot.verifiedbootstate=o
 OPTIONS="$OPTIONS androidboot.serialno=$SERIAL"
 OPTIONS="$(echo "$OPTIONS" | tr -s ' ')"
 
-ENTRY="title LineageOS (Surface Pro X)
+write_file() { # write_file PATH CONTENT
+    msg2 "writing $1"
+    if [ "$DRY" = 1 ]; then
+        printf '%s\n' "$2" | sed 's/^/      /'
+    else
+        printf '%s\n' "$2" > "$1"
+    fi
+}
+
+# --- Boot entry ----------------------------------------------------------------------
+if [ "$BOOT_MODE" = grub ]; then
+    # Paths in a BLS entry are relative to the file system that holds /boot.
+    BOOT_MNT="$(findmnt -no TARGET --target /boot)"
+    if [ "$BOOT_MNT" = /boot ]; then PREFIX=""; else PREFIX="/boot"; fi
+    msg "Installing boot files to /boot/$BOOT_SUBDIR"
+    run mkdir -p "/boot/$BOOT_SUBDIR"
+    run install -m644 "$IMG_DIR/Image" "$IMG_DIR/ramdisk.img" "$IMG_DIR/$DTB" "/boot/$BOOT_SUBDIR/"
+    write_file "/boot/loader/entries/$ENTRY_ID.conf" "title LineageOS (Surface Pro X)
 version $ENTRY_ID
 linux $PREFIX/$BOOT_SUBDIR/Image
 initrd $PREFIX/$BOOT_SUBDIR/ramdisk.img
@@ -262,15 +372,56 @@ options $OPTIONS
 grub_users \$grub_users
 grub_arg --unrestricted
 grub_class lineageos"
-msg "Writing $ENTRY_FILE"
-if [ "$DRY" = 1 ]; then
-    sed 's/^/      /' <<<"$ENTRY"
+    msg "Done ($MODE)."
+    echo "    Fedora stays the default. To boot LineageOS once:"
+    echo "        sudo grub2-reboot $ENTRY_ID && sudo reboot"
 else
-    printf '%s\n' "$ENTRY" > "$ENTRY_FILE"
-fi
+    mount_esp
+    need=$(( $(stat -c %s "$IMG_DIR/Image") + $(stat -c %s "$IMG_DIR/ramdisk.img") + 4194304 ))
+    have=$(( $(stat -f -c '%a * %S' "$ESP_MNT") ))
+    [ -d "$ESP_MNT/$BOOT_SUBDIR" ] && have=$(( have + $(du -sb "$ESP_MNT/$BOOT_SUBDIR" | cut -f1) ))
+    [ "$have" -ge "$need" ] ||
+        die "the EFI system partition has $((have / 1048576)) MiB free, LineageOS needs $((need / 1048576)) MiB"
 
-msg "Done ($MODE)."
-echo "    Fedora stays the default. To boot LineageOS once:"
-echo "        sudo grub2-reboot $ENTRY_ID && sudo reboot"
-echo "    The first boot takes several minutes. If it fails, boot Fedora and run"
-echo "        sudo ./read-bootlog.sh"
+    if [ -d "$ESP_MNT/EFI/fedora" ] && ! efibootmgr | grep -qF "$EFI_LABEL"; then
+        warn "Fedora is installed on $DISK. systemd-boot will become the default boot"
+        warn "manager and does not list Fedora; you would reach Fedora through the Surface"
+        warn "boot menu (Volume Down at power-on). Running this from the installed Fedora"
+        warn "instead adds LineageOS to Fedora's GRUB menu."
+        confirm "Make systemd-boot the default anyway?"
+    fi
+    msg "Installing systemd-boot and boot files to the EFI system partition"
+    run mkdir -p "$ESP_MNT/EFI/systemd" "$ESP_MNT/loader/entries" "$ESP_MNT/$BOOT_SUBDIR"
+    run install -m644 "$SDBOOT_SRC" "$ESP_MNT/EFI/systemd/systemd-bootaa64.efi"
+    if [ "$ERASE" = 1 ]; then
+        # Fallback path, so the drive boots even if the UEFI entry is lost.
+        run mkdir -p "$ESP_MNT/EFI/BOOT"
+        run install -m644 "$SDBOOT_SRC" "$ESP_MNT/EFI/BOOT/BOOTAA64.EFI"
+    fi
+    run install -m644 "$IMG_DIR/Image" "$IMG_DIR/ramdisk.img" "$IMG_DIR/$DTB" "$ESP_MNT/$BOOT_SUBDIR/"
+    [ -f "$ESP_MNT/loader/loader.conf" ] ||
+        write_file "$ESP_MNT/loader/loader.conf" "default $ENTRY_ID.conf
+timeout 5
+console-mode max"
+    write_file "$ESP_MNT/loader/entries/$ENTRY_ID.conf" "title LineageOS (Surface Pro X)
+linux /$BOOT_SUBDIR/Image
+initrd /$BOOT_SUBDIR/ramdisk.img
+devicetree /$BOOT_SUBDIR/$DTB
+options $OPTIONS"
+
+    if ! efibootmgr | grep -qF "$EFI_LABEL"; then
+        espdev="$(esp_part)"
+        espnum="$(cat "/sys/class/block/$(basename "$espdev")/partition")"
+        msg "Adding the UEFI boot entry \"$EFI_LABEL\" (first in the boot order)"
+        if ! run efibootmgr -q --create --disk "$DISK" --part "$espnum" \
+                --label "$EFI_LABEL" --loader '\EFI\systemd\systemd-bootaa64.efi'; then
+            warn "efibootmgr failed. Add the entry from a UEFI shell instead:"
+            warn "  bcfg boot add 0 FS0:\\EFI\\systemd\\systemd-bootaa64.efi \"$EFI_LABEL\""
+        fi
+    fi
+    msg "Done ($MODE)."
+    echo "    Remove the USB drive and restart. The systemd-boot menu shows LineageOS"
+    [ "$ERASE" = 1 ] || echo "    and Windows (if present). Hold Space at start-up if the menu doesn't appear."
+fi
+echo "    The first boot takes several minutes. If it fails, boot Linux (Fedora or"
+echo "    the USB system) and run: sudo ./read-bootlog.sh"

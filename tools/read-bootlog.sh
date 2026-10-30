@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Copy Android's bring-up logs from the "metadata" partition to Fedora.
+# Copy Android's bring-up logs from the "metadata" partition to Linux.
 #
-# Run ON THE SURFACE, from Fedora, after booting LineageOS:
+# Run ON THE SURFACE, from Fedora or the USB system, after booting LineageOS:
 #   sudo ./read-bootlog.sh [DEST]      (default: ./spx-bootlogs)
 #
 # Android writes dmesg, logcat and a status summary of the last 5 boots to

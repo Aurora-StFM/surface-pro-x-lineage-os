@@ -28,7 +28,7 @@ After choosing LineageOS in GRUB, kernel messages should scroll on the screen (`
 
 First-stage init mounts the dynamic partitions from `super` and `/metadata`. If it fails, init reboots after printing an error. Look for these on screen:
 
-- `Could not find /dev/block/by-name/super` or a wait timeout: `androidboot.boot_devices` doesn't match the NVMe controller. Compare the value in `/boot/loader/entries/lineage-spx.conf` with `readlink -f /sys/class/block/nvme0n1` in Fedora.
+- `Could not find /dev/block/by-name/super` or a wait timeout: `androidboot.boot_devices` doesn't match the NVMe controller. Compare the value in the boot entry (`/boot/loader/entries/lineage-spx.conf` with Fedora, `loader/entries/lineage-spx.conf` on the EFI system partition otherwise) with `readlink -f /sys/class/block/nvme0n1` in Linux.
 - `Failed to mount /system`: `super.img` wasn't written completely, or the kernel lacks device-mapper support.
 
 `sudo ./read-bootlog.sh` in Fedora reports "Android never got as far as mounting /metadata" in this case.

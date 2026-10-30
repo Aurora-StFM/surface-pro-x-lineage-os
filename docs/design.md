@@ -19,13 +19,18 @@ The kernel is a prebuilt (`TARGET_PREBUILT_KERNEL`) rather than built inside the
 
 ## Boot
 
-The Surface's UEFI firmware runs Fedora's GRUB. GRUB loads three files from `/boot/lineage-spx/`:
+The Surface's UEFI firmware runs a boot manager, which loads three files:
 
 - `Image`: the kernel.
 - `ramdisk.img`: Android's generic ramdisk, which holds first-stage init and `fstab.spx`.
 - `sc8180x-surface-pro-x.dtb`: the same device tree Fedora boots with.
 
-The kernel command line is written by `tools/install-android.sh` into the GRUB (BLS) entry. Besides Fedora's arguments it sets:
+Which boot manager depends on what else is on the drive:
+
+- **Fedora installed:** Fedora's GRUB. The files go to `/boot/lineage-spx/` and the entry to `/boot/loader/entries/lineage-spx.conf`, next to Fedora's kernels.
+- **No Fedora (Windows only, or an erased drive):** systemd-boot, installed by the installer from the Fedora port's USB system. The files go to `lineage-spx/` on the EFI system partition, the entry to `loader/entries/lineage-spx.conf` there, and a UEFI boot entry puts systemd-boot first. systemd-boot finds Windows Boot Manager on its own. On an erased drive it is also copied to the fallback path `EFI/BOOT/BOOTAA64.EFI`. Both boot managers read the same entry format (Boot Loader Specification), including the `devicetree` line.
+
+The kernel command line is written by `tools/install-android.sh` into the boot entry. Besides Fedora's arguments it sets:
 
 | Argument | Why |
 |---|---|
@@ -37,7 +42,7 @@ The kernel command line is written by `tools/install-android.sh` into the GRUB (
 | `firmware_class.path=/vendor/firmware` | The kernel's firmware loader looks in `/lib/firmware` by default |
 | `console=tty0` | Kernel messages on the screen, so early failures are visible |
 
-There is no boot.img, no Android bootloader and no fastboot, which is why updates go through the installer in Fedora rather than `fastboot flash`. Google's UEFI generic bootloader (GBL) could replace GRUB later and give a more standard Android boot, but it is new and untested on hardware like this.
+There is no boot.img, no Android bootloader and no fastboot, which is why updates go through the installer in Linux rather than `fastboot flash`. Google's UEFI generic bootloader (GBL) could replace GRUB later and give a more standard Android boot, but it is new and untested on hardware like this.
 
 ## Storage
 
