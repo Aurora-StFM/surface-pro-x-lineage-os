@@ -1,0 +1,19 @@
+# Surface Pro X
+#
+# Android lives in four GPT partitions on the internal NVMe drive, next to
+# Windows and Fedora, named exactly as below (tools/install-android.sh
+# creates them). ueventd links them under /dev/block/by-name because the
+# NVMe controller is listed in androidboot.boot_devices.
+#
+# No metadata encryption and no checkpointing: both need kernel features
+# (dm-default-key, dm-bow) that only exist in Android's kernel fork.
+#
+#<src>                        <mnt_point>  <type>  <mnt_flags>                                          <fs_mgr_flags>
+system                        /system      ext4    ro,barrier=1                                         wait,logical,first_stage_mount
+system_ext                    /system_ext  ext4    ro,barrier=1                                         wait,logical,first_stage_mount
+product                       /product     ext4    ro,barrier=1                                         wait,logical,first_stage_mount
+vendor                        /vendor      ext4    ro,barrier=1                                         wait,logical,first_stage_mount
+/dev/block/by-name/metadata   /metadata    ext4    noatime,nosuid,nodev,discard                         wait,check,formattable,first_stage_mount
+/dev/block/by-name/userdata   /data        ext4    noatime,nosuid,nodev,discard,noauto_da_alloc,errors=panic  latemount,wait,check,formattable,quota,reservedsize=128M,fileencryption=aes-256-xts:aes-256-cts:v2
+/dev/block/by-name/misc       /misc        emmc    defaults                                             defaults
+/dev/block/zram0              none         swap    defaults                                             zramsize=25%,max_comp_streams=8

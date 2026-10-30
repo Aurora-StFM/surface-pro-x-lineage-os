@@ -1,0 +1,24 @@
+# Surface Pro X ueventd configuration (/vendor/etc/ueventd.rc)
+
+# Load kernel modules from /vendor/lib/modules when the kernel announces a
+# device they handle (the same job udev does on Fedora).
+modalias_handling enabled
+
+# Firmware for remote processors, GPU and Wi-Fi.
+firmware_directories /vendor/firmware/
+
+# Graphics
+/dev/dri/*                0666   system     graphics
+/dev/dma_heap/system      0444   system     system
+/dev/dma_heap/reserved    0444   system     system
+/dev/sw_sync              0660   system     graphics
+
+# Qualcomm remote processor services
+/dev/qcom_rmtfs_mem*      0660   root       system
+/dev/qcom_rmtfs_uio*      0660   root       system
+
+# Bluetooth and Wi-Fi radio switches
+/dev/rfkill               0660   bluetooth  net_bt
+
+# Sensors (IIO), for later
+/dev/iio:device*          0660   system     system

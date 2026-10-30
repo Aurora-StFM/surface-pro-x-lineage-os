@@ -1,0 +1,52 @@
+# Surface Pro X init configuration.
+# Imported automatically as /vendor/etc/init/hw/init.${ro.hardware}.rc
+
+on early-init
+    # Modules nothing asks for by modalias (qrtr itself is built in).
+    # The rest load from ueventd.
+    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules \
+        qcom_pd_mapper
+
+on fs
+    mount_all /vendor/etc/fstab.spx --early
+
+on late-fs
+    mount_all /vendor/etc/fstab.spx --late
+
+on post-fs-data
+    mkdir /data/vendor/rmtfs 0770 root system
+    mkdir /data/vendor/tmp 0771 root system
+    mkdir /data/vendor/tmp/tqftpserv 0770 root system
+    mkdir /data/vendor/wifi 0771 wifi wifi
+    mkdir /data/vendor/wifi/wpa 0770 wifi wifi
+    mkdir /data/vendor/wifi/wpa/sockets 0770 wifi wifi
+    # The modem DSP (which runs the Wi-Fi firmware) is started by rmtfs.
+    exec_start vendor.spx-rmtfs-prepare
+    start vendor.rmtfs
+    start vendor.tqftpserv
+
+on boot
+    swapon_all /vendor/etc/fstab.spx
+    # Let the bring-up log helper and others read the kernel log.
+    write /proc/sys/kernel/dmesg_restrict 0
+
+# Zero-filled modem file system images, like the Fedora port's rmtfs-prepare:
+# the modem's real EFS partitions can't be reached from Linux yet.
+service vendor.spx-rmtfs-prepare /vendor/bin/spx-rmtfs-prepare.sh
+    class core
+    user root
+    group root system
+    oneshot
+    disabled
+
+service vendor.rmtfs /vendor/bin/rmtfs -r -s -o /data/vendor/rmtfs
+    class core
+    user root
+    group root system
+    disabled
+
+service vendor.tqftpserv /vendor/bin/tqftpserv
+    class core
+    user root
+    group root system
+    disabled

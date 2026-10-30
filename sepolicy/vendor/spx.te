@@ -1,0 +1,26 @@
+# SELinux policy for the Surface Pro X bring-up.
+#
+# The domains below are permissive: they log denials instead of blocking.
+# The build also boots with androidboot.selinux=permissive (set by
+# tools/install-android.sh). Once things work, collect the denials
+# (adb shell dmesg | grep avc) and replace this with real rules.
+
+# rmtfs: serves the modem's file system images
+type rmtfs, domain;
+type rmtfs_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(rmtfs)
+permissive rmtfs;
+
+type rmtfs_device, dev_type;
+
+# tqftpserv: serves firmware and config files to the DSPs over QRTR
+type tqftpserv, domain;
+type tqftpserv_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(tqftpserv)
+permissive tqftpserv;
+
+# Bring-up helper scripts (boot log, rmtfs image preparation)
+type spx_debug, domain;
+type spx_debug_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(spx_debug)
+permissive spx_debug;

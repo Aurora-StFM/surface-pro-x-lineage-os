@@ -1,0 +1,25 @@
+# Bring-up logging for the Surface Pro X.
+#
+# /metadata is an unencrypted ext4 partition that is mounted in first-stage
+# init, so it is the earliest place a log can survive a failed boot. Fedora
+# can read it afterwards with tools/read-bootlog.sh.
+#
+# Remove this file (and spx-bootlog.sh from device.mk) once the port is stable.
+
+on post-fs
+    start vendor.spx-bootlog
+
+on property:sys.boot_completed=1
+    start vendor.spx-bootlog-final
+
+service vendor.spx-bootlog /vendor/bin/spx-bootlog.sh boot
+    user root
+    group root log
+    oneshot
+    disabled
+
+service vendor.spx-bootlog-final /vendor/bin/spx-bootlog.sh final
+    user root
+    group root log
+    oneshot
+    disabled

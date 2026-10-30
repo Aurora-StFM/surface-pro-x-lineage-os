@@ -1,0 +1,8 @@
+# Build outputs: kernel, firmware and adb key staged for the Android build
+prebuilt/
+# Working trees and packed images (see OUT_DIR in config.env)
+out/
+*.img
+*.tar
+# Logs copied off the tablet by tools/read-bootlog.sh
+spx-bootlogs/

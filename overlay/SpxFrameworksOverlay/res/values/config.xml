@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Copyright (C) 2026 surface-pro-x-lineage-os contributors
+
+    SPDX-License-Identifier: Apache-2.0
+-->
+<resources>
+    <!-- Closing the Type Cover over the screen (lid switch) puts the
+         tablet to sleep, like on Windows and Fedora. -->
+    <bool name="config_lidControlsSleep">true</bool>
+
+    <!-- No light sensor support yet. -->
+    <bool name="config_automatic_brightness_available">false</bool>
+
+    <!-- No accelerometer support yet, so no automatic rotation. -->
+    <bool name="config_supportAutoRotation">false</bool>
+
+    <!-- Plugging in a charger should not wake the screen. -->
+    <bool name="config_unplugTurnsOnScreen">false</bool>
+</resources>

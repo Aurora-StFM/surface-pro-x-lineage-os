@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Local manifest for the Surface Pro X LineageOS port.
+
+    Copy to .repo/local_manifests/spx.xml in your LineageOS checkout
+    (build.sh setup does this), then run "repo sync".
+
+    The "github" remote is defined by LineageOS's own manifest.
+-->
+<manifest>
+    <!-- This repository is the device tree. -->
+    <project path="device/microsoft/spx"
+             name="Aurora-StFM/surface-pro-x-lineage-os"
+             remote="github"
+             revision="main" />
+
+    <!-- Qualcomm remote processor userspace from linux-msm (the same tools
+         the Fedora port uses). Each ships an Android.bp. -->
+    <project path="external/linux-msm/qrtr"
+             name="linux-msm/qrtr"
+             remote="github"
+             revision="29e36ae164389580a0f8ea7a7fdb728140ae978d" />
+    <project path="external/linux-msm/rmtfs"
+             name="linux-msm/rmtfs"
+             remote="github"
+             revision="b30a3eb38f9af283f18dbd3c7755653efc52c094" />
+    <project path="external/linux-msm/tqftpserv"
+             name="linux-msm/tqftpserv"
+             remote="github"
+             revision="eb4b9a04ff92d2753ededf32cc3b6ed287f6e29b" />
+</manifest>
