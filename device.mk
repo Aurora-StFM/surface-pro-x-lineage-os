@@ -89,6 +89,12 @@ PRODUCT_COPY_FILES += \
 PRODUCT_VENDOR_PROPERTIES += \
     wifi.interface=wlan0
 
+# Qualcomm Wi-Fi HAL (libwifi-hal-qcom, BOARD_WLAN_DEVICE := qcwcn). The
+# "legacy" variant is the one for older chips like the WCN3990, and the one
+# Linaro uses with ath10k on the Dragonboard 845c.
+PRODUCT_SOONG_NAMESPACES += \
+    hardware/qcom/wlan/legacy
+
 # Bluetooth (HCI user channel on hci0; experimental)
 PRODUCT_PACKAGES += \
     android.hardware.bluetooth-service.default
