@@ -63,7 +63,7 @@ PRODUCT_PACKAGES += \
 # Software security HALs (no TEE on this port). Keys are NOT hardware-backed.
 PRODUCT_PACKAGES += \
     android.hardware.security.keymint-service.nonsecure \
-    android.hardware.gatekeeper-service.nonsecure
+    com.android.hardware.gatekeeper.nonsecure
 
 # Battery (Surface System Aggregator battery and charger via power_supply)
 PRODUCT_PACKAGES += \
@@ -79,10 +79,10 @@ PRODUCT_PACKAGES += \
     hostapd \
     libwpa_client \
     wificond \
-    wpa_supplicant \
-    wpa_supplicant.conf
+    wpa_supplicant
 
 PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/configs/wifi/wpa_supplicant.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/wpa_supplicant.conf \
     $(LOCAL_PATH)/configs/wifi/wpa_supplicant_overlay.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/wpa_supplicant_overlay.conf \
     $(LOCAL_PATH)/configs/wifi/p2p_supplicant_overlay.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/p2p_supplicant_overlay.conf
 
