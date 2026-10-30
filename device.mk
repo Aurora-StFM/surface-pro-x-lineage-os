@@ -90,10 +90,11 @@ PRODUCT_VENDOR_PROPERTIES += \
     wifi.interface=wlan0
 
 # Qualcomm Wi-Fi HAL (libwifi-hal-qcom, BOARD_WLAN_DEVICE := qcwcn). The
-# "legacy" variant is the one for older chips like the WCN3990, and the one
+# top-level namespace picks the chip variant; with BOARD_WLAN_CHIP unset it
+# uses the "legacy" one, which suits older chips like the WCN3990 and is what
 # Linaro uses with ath10k on the Dragonboard 845c.
 PRODUCT_SOONG_NAMESPACES += \
-    hardware/qcom/wlan/legacy
+    hardware/qcom/wlan
 
 # Bluetooth (HCI user channel on hci0; experimental)
 PRODUCT_PACKAGES += \
