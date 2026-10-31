@@ -4,13 +4,16 @@
 #
 #   spx-bootlog.sh boot    started at init: snapshots every 3 s for 10 min
 #   spx-bootlog.sh final   started at boot completion: one last snapshot
+#   spx-bootlog.sh shutdown run by init when it starts to reboot or power off
+#
+# logcat and ip live in /system/bin, which is not on a vendor script's PATH.
 
 BASE=/metadata/spx-debug
 KEEP=5
 
 snapshot() {
     dmesg > "$DIR/dmesg.txt" 2>&1
-    logcat -d -b all -v threadtime > "$DIR/logcat.txt" 2>&1
+    /system/bin/logcat -d -b all -v threadtime > "$DIR/logcat.txt" 2>&1
     getprop > "$DIR/props.txt" 2>&1
     {
         date
@@ -24,7 +27,7 @@ snapshot() {
             [ -e "$r/name" ] && echo "$(cat "$r/name"): $(cat "$r/state")"
         done
         echo "--- network"
-        ip addr 2>&1
+        /system/bin/ip addr 2>&1
     } > "$DIR/status.txt" 2>&1
     sync
 }
@@ -56,6 +59,18 @@ case "$1" in
         mkdir -p "$DIR"
         snapshot
         echo "boot completed" > "$DIR/COMPLETED"
+        sync
+        ;;
+    shutdown)
+        DIR="$BASE/boot.1"
+        mkdir -p "$DIR"
+        snapshot
+        {
+            date
+            cat /proc/uptime
+            getprop sys.powerctl
+            getprop sys.boot.reason
+        } > "$DIR/SHUTDOWN" 2>&1
         sync
         ;;
 esac

@@ -14,6 +14,11 @@ on init
 on property:sys.boot_completed=1
     start vendor.spx-bootlog-final
 
+# Runs when init starts a reboot or power-off, so the log covers whatever
+# made Android give up.
+on shutdown
+    exec -- /vendor/bin/spx-bootlog.sh shutdown
+
 service vendor.spx-bootlog /vendor/bin/spx-bootlog.sh boot
     user root
     group root log

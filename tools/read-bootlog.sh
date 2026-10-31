@@ -34,6 +34,7 @@ for d in "$DEST"/boot.*; do
     [ -d "$d" ] || continue
     state="did not finish booting"
     [ -e "$d/COMPLETED" ] && state="finished booting"
+    [ -e "$d/SHUTDOWN" ] && state="$state, rebooted: $(sed -n 3p "$d/SHUTDOWN")"
     printf '  %s  %s  (%s)\n' "$(basename "$d")" "$(date -r "$d/status.txt" '+%F %T' 2>/dev/null || echo '?')" "$state"
 done
 echo "Start with boot.1/status.txt, then boot.1/logcat.txt and boot.1/dmesg.txt."
