@@ -85,6 +85,8 @@ for opt in ANDROID_BINDER_IPC=y ANDROID_BINDERFS=y SECURITY_SELINUX=y BLK_DEV_DM
            DRM_MSM=m ATH10K_SNOC=m SURFACE_AGGREGATOR=m QCOM_PD_MAPPER=m; do
     grep -q "^CONFIG_${opt}\$" "$BUILD/.config" || die "CONFIG_${opt} missing from the final config"
 done
+grep -q '^CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder"$' "$BUILD/.config" ||
+    die "CONFIG_ANDROID_BINDER_DEVICES must be \"binder,hwbinder,vndbinder\""
 # Report other android.config settings that did not survive (not fatal).
 while IFS= read -r line; do
     case "$line" in CONFIG_*=*) ;; *) continue ;; esac
