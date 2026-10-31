@@ -344,6 +344,9 @@ OPTIONS="$KARGS console=tty0 printk.devkmsg=on firmware_class.path=/vendor/firmw
 OPTIONS="$OPTIONS androidboot.hardware=spx androidboot.boot_devices=$BOOT_DEVICES"
 OPTIONS="$OPTIONS androidboot.selinux=permissive androidboot.verifiedbootstate=orange"
 OPTIONS="$OPTIONS androidboot.serialno=$SERIAL"
+# Bring-up: when init hits a fatal error, panic instead of rebooting, and
+# leave the panic on screen (panic=0) so the last messages can be read.
+OPTIONS="$OPTIONS androidboot.init_fatal_panic=true panic=0 log_buf_len=4M"
 OPTIONS="$(echo "$OPTIONS" | tr -s ' ')"
 
 write_file() { # write_file PATH CONTENT

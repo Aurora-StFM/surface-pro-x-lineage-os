@@ -6,7 +6,9 @@
 #
 # Remove this file (and spx-bootlog.sh from device.mk) once the port is stable.
 
-on post-fs
+# /metadata is mounted by first-stage init, so logging can start as soon as
+# second-stage init begins, before most things that can fail.
+on init
     start vendor.spx-bootlog
 
 on property:sys.boot_completed=1

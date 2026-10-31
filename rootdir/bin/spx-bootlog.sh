@@ -2,7 +2,7 @@
 # Keep kernel and Android logs of the last few boots on /metadata/spx-debug,
 # where Fedora can read them after a failed boot (tools/read-bootlog.sh).
 #
-#   spx-bootlog.sh boot    started at post-fs: snapshots every 10 s for 10 min
+#   spx-bootlog.sh boot    started at init: snapshots every 3 s for 10 min
 #   spx-bootlog.sh final   started at boot completion: one last snapshot
 
 BASE=/metadata/spx-debug
@@ -44,10 +44,10 @@ case "$1" in
         DIR="$BASE/boot.1"
         mkdir -p "$DIR"
         n=0
-        while [ "$n" -lt 60 ]; do
+        while [ "$n" -lt 200 ]; do
             snapshot
             [ "$(getprop sys.boot_completed)" = 1 ] && break
-            sleep 10
+            sleep 3
             n=$((n + 1))
         done
         ;;

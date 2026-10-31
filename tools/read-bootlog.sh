@@ -21,8 +21,8 @@ trap 'umount "$mnt" 2>/dev/null; rmdir "$mnt"' EXIT
 mount -o ro "$dev" "$mnt"
 
 if [ ! -d "$mnt/spx-debug" ]; then
-    echo "No logs on $dev: Android never got as far as mounting /metadata."
-    echo "The kernel or first-stage init failed; check the messages on screen."
+    echo "No logs on $dev. Either first-stage init did not mount /metadata, or"
+    echo "Android stopped before its boot logger started. Check the messages on screen."
     exit 1
 fi
 
