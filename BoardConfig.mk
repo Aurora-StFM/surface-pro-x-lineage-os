@@ -63,6 +63,11 @@ BOARD_SPX_DYNAMIC_PARTITIONS_SIZE := 8585740288
 BOARD_SPX_DYNAMIC_PARTITIONS_PARTITION_LIST := system system_ext product vendor
 BOARD_BUILD_SUPER_IMAGE_BY_DEFAULT := true
 
+# No A/B slots: tools/install-android.sh rewrites super in place. Android 16
+# turns A/B on unless a board says otherwise, and with it the build insists
+# on room for two copies of every partition in super.
+AB_OTA_UPDATER := false
+
 # Verified boot: off. GRUB cannot pass a verified boot state.
 BOARD_AVB_ENABLE := false
 
