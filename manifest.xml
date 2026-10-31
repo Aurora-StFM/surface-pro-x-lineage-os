@@ -1,28 +1,8 @@
 <!--
     Vendor interface manifest for the Surface Pro X.
 
-    Most HALs in device.mk install their own VINTF fragment. Only the minigbm
-    gralloc 4 HALs are declared here, because their modules do not ship one.
-    If the build reports a duplicate declaration for either of them, delete
-    the entry below.
+    The HALs in device.mk install their own VINTF fragments (in
+    /vendor/etc/vintf/manifest/), so this file only sets the target level.
 -->
 <manifest version="1.0" type="device" target-level="7">
-    <hal format="hidl">
-        <name>android.hardware.graphics.allocator</name>
-        <transport>hwbinder</transport>
-        <version>4.0</version>
-        <interface>
-            <name>IAllocator</name>
-            <instance>default</instance>
-        </interface>
-    </hal>
-    <hal format="hidl">
-        <name>android.hardware.graphics.mapper</name>
-        <transport arch="32+64">passthrough</transport>
-        <version>4.0</version>
-        <interface>
-            <name>IMapper</name>
-            <instance>default</instance>
-        </interface>
-    </hal>
 </manifest>
