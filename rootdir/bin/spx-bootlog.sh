@@ -32,6 +32,37 @@ snapshot() {
     sync
 }
 
+# Where processes that matter during bring-up are stuck: user-space backtraces
+# (debuggerd) and kernel stacks. Written to hangs.N.txt.
+HANG_PATTERNS="audio.service-aidl audioserver system_server"
+hang_dump() {
+    {
+        date
+        cat /proc/uptime
+        echo "--- sound cards"
+        cat /proc/asound/cards 2>&1
+        ls -l /dev/snd 2>&1
+        for c in /proc/[0-9]*/cmdline; do
+            pid=${c#/proc/}
+            pid=${pid%/cmdline}
+            cmd=$(tr '\0' ' ' < "$c" 2>/dev/null)
+            for p in $HANG_PATTERNS; do
+                case "$cmd" in
+                    *"$p"*)
+                        echo "=== pid $pid: $cmd"
+                        for t in /proc/"$pid"/task/*; do
+                            echo "--- tid ${t##*/} $(cat "$t/comm" 2>/dev/null) wchan=$(cat "$t/wchan" 2>/dev/null)"
+                            cat "$t/stack" 2>/dev/null
+                        done
+                        /system/bin/debuggerd -b "$pid" 2>&1
+                        break ;;
+                esac
+            done
+        done
+    } > "$DIR/hangs.$1.txt" 2>&1
+    sync
+}
+
 mkdir -p "$BASE" || exit 0
 
 case "$1" in
@@ -50,6 +81,8 @@ case "$1" in
         while [ "$n" -lt 200 ]; do
             snapshot
             [ "$(getprop sys.boot_completed)" = 1 ] && break
+            # After about 1.5 and 5 minutes, record where things are stuck.
+            case "$n" in 30|100) hang_dump "$n" ;; esac
             sleep 3
             n=$((n + 1))
         done
