@@ -1,0 +1,43 @@
+From: Aurora-StFM <84717132+Aurora-StFM@users.noreply.github.com>
+Subject: [PATCH] mm: shmem: answer ASHMEM_GET_SIZE on memfds for Android
+
+Mainline has no ashmem driver, so Android must use memfd instead. Its
+libcutils only does that after checking that ASHMEM_GET_SIZE works on a
+memfd, and otherwise falls back to /dev/ashmem, which does not exist,
+and system_server dies with "Failed to create ashmem". Answer that ioctl
+with the file size, as Android's common kernels do.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+diff --git a/mm/shmem.c b/mm/shmem.c
+index d09ccb2ba..433bbbb84 100644
+--- a/mm/shmem.c
++++ b/mm/shmem.c
+@@ -5212,8 +5212,27 @@ static const struct address_space_operations shmem_aops = {
+ 	.error_remove_folio = shmem_error_remove_folio,
+ };
+ 
++/*
++ * Android compatibility: Android's libcutils only uses memfd in place of the
++ * ashmem driver (which mainline no longer has) after checking that the
++ * ASHMEM_GET_SIZE ioctl works on a memfd. Answer that one ioctl, as
++ * Android's own kernels do; everything else Android emulates with seals.
++ */
++#define SHMEM_ASHMEM_IOC	0x77
++#define SHMEM_ASHMEM_GET_SIZE	_IO(SHMEM_ASHMEM_IOC, 4)
++
++static long shmem_ashmem_compat_ioctl(struct file *file, unsigned int cmd,
++				      unsigned long arg)
++{
++	if (cmd == SHMEM_ASHMEM_GET_SIZE)
++		return i_size_read(file_inode(file));
++	return -ENOTTY;
++}
++
+ static const struct file_operations shmem_file_operations = {
+ 	.mmap		= shmem_mmap,
++	.unlocked_ioctl	= shmem_ashmem_compat_ioctl,
++	.compat_ioctl	= shmem_ashmem_compat_ioctl,
+ 	.open		= shmem_file_open,
+ 	.get_unmapped_area = shmem_get_unmapped_area,
+ #ifdef CONFIG_TMPFS

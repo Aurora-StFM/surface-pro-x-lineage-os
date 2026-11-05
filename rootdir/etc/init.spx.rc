@@ -2,6 +2,10 @@
 # Imported automatically as /vendor/etc/init/hw/init.${ro.hardware}.rc
 
 on early-init
+    # The kernel has no ashmem driver; make Android use memfd instead (needs
+    # kernel/patches/0001-mm-shmem-...). Must be set before zygote starts.
+    setprop sys.use_memfd true
+
     # Modules nothing asks for by modalias (qrtr itself is built in).
     # The rest load from ueventd.
     exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules \
