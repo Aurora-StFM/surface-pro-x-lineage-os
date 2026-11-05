@@ -65,6 +65,12 @@ PRODUCT_PACKAGES += \
     android.hardware.security.keymint-service.nonsecure \
     com.android.hardware.gatekeeper.nonsecure
 
+# Audio: AOSP's example AIDL audio HAL, which only offers virtual devices
+# (no sound yet). audioserver crashes at start-up without any audio HAL.
+PRODUCT_PACKAGES += \
+    com.android.hardware.audio
+$(call inherit-product, hardware/interfaces/audio/aidl/default/audio_effects.mk)
+
 # Battery (Surface System Aggregator battery and charger via power_supply)
 PRODUCT_PACKAGES += \
     android.hardware.health-service.example
