@@ -26,13 +26,6 @@ snapshot() {
         for r in /sys/class/remoteproc/*; do
             [ -e "$r/name" ] && echo "$(cat "$r/name"): $(cat "$r/state")"
         done
-        echo "--- gralloc allocator environment"
-        for c in /proc/[0-9]*/cmdline; do
-            case "$(cat "$c" 2>/dev/null)" in
-                *graphics.allocator*)
-                    tr '\0' '\n' < "${c%cmdline}environ" | grep MINIGBM ;;
-            esac
-        done
         echo "--- network"
         /system/bin/ip addr 2>&1
     } > "$DIR/status.txt" 2>&1

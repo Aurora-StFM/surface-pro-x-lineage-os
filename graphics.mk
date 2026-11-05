@@ -37,8 +37,12 @@ PRODUCT_PACKAGES += \
     vulkan.pastel
 
 PRODUCT_REQUIRES_INSECURE_EXECMEM_FOR_SWIFTSHADER := true
-# Note: init.spx.rc sets MINIGBM_DEBUG=nocompression so buffers stay CPU-mappable
-# for SwiftShader. Remove that once rendering moves to the GPU (Mesa).
+# minigbm would give GPU-only buffers Qualcomm's compressed UBWC layout, which
+# its own mapper refuses to map for the CPU. SwiftShader renders on the CPU, so
+# keep every buffer linear. On Android minigbm reads this property (its
+# MINIGBM_DEBUG option); drop it once rendering moves to the GPU (Mesa).
+PRODUCT_VENDOR_PROPERTIES += \
+    vendor.minigbm.debug=nocompression
 
 PRODUCT_VENDOR_PROPERTIES += \
     ro.hardware.egl=angle \
