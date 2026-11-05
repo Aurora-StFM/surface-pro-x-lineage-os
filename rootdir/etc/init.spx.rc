@@ -5,7 +5,8 @@ on early-init
     # minigbm (gralloc) would allocate GPU buffers in Qualcomm's compressed
     # UBWC layout, which the CPU cannot map. Rendering is done on the CPU
     # (SwiftShader) for now, so every buffer must be plain linear memory.
-    # Inherited by all services started after this, including the allocator.
+    # Inherited by all services started after this; the allocator service
+    # below also sets it itself, since that is the one that decides.
     export MINIGBM_DEBUG nocompression
 
     # Modules nothing asks for by modalias (qrtr itself is built in).
@@ -56,3 +57,16 @@ service vendor.tqftpserv /vendor/bin/tqftpserv
     user root
     group root system
     disabled
+
+# minigbm's allocator service, redefined to set MINIGBM_DEBUG directly (see
+# early-init). Same as the module's own .rc apart from the setenv line.
+service vendor.graphics.allocator-4-0 /vendor/bin/hw/android.hardware.graphics.allocator@4.0-service.minigbm_msm
+    override
+    interface android.hardware.graphics.allocator@4.0::IAllocator default
+    class hal animation
+    user system
+    group graphics drmrpc
+    capabilities SYS_NICE
+    setenv MINIGBM_DEBUG nocompression
+    onrestart restart surfaceflinger
+    task_profiles ServiceCapacityLow
