@@ -37,6 +37,8 @@ PRODUCT_PACKAGES += \
     vulkan.pastel
 
 PRODUCT_REQUIRES_INSECURE_EXECMEM_FOR_SWIFTSHADER := true
+# Note: init.spx.rc sets MINIGBM_DEBUG=nocompression so buffers stay CPU-mappable
+# for SwiftShader. Remove that once rendering moves to the GPU (Mesa).
 
 PRODUCT_VENDOR_PROPERTIES += \
     ro.hardware.egl=angle \
