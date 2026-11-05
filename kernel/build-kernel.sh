@@ -79,7 +79,7 @@ mkdir -p "$BUILD"
 # Options Android cannot boot without. If one of these is missing, a
 # dependency in the merged config turned it off; check with menuconfig.
 for opt in ANDROID_BINDER_IPC=y ANDROID_BINDERFS=y SECURITY_SELINUX=y BLK_DEV_DM=y \
-           DM_VERITY=y BLK_DEV_LOOP=y EXT4_FS=y EROFS_FS=y FUSE_FS=y FS_ENCRYPTION=y \
+           DM_VERITY=y BLK_DEV_LOOP=y EXT4_FS=y UNICODE=y EROFS_FS=y FUSE_FS=y FS_ENCRYPTION=y \
            BPF_SYSCALL=y CGROUP_BPF=y CPUSETS_V1=y BLK_CGROUP=y PSI=y BLK_DEV_NVME=y PCIE_QCOM=y RD_GZIP=y \
            DMABUF_HEAPS_SYSTEM=y SYNC_FILE=y NETFILTER_XT_MATCH_BPF=y IP6_NF_IPTABLES=y \
            DRM_MSM=m ATH10K_SNOC=m SURFACE_AGGREGATOR=m QCOM_PD_MAPPER=m; do

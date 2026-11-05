@@ -4,6 +4,9 @@
 /dev/qcom_rmtfs_mem[0-9]+                           u:object_r:rmtfs_device:s0
 /dev/qcom_rmtfs_uio[0-9]+                           u:object_r:rmtfs_device:s0
 
+# Software KeyMint (AOSP leaves this variant unlabeled)
+/vendor/bin/hw/android\.hardware\.security\.keymint-service\.nonsecure     u:object_r:hal_keymint_default_exec:s0
+
 # Bring-up helpers
 /vendor/bin/spx-bootlog\.sh                         u:object_r:spx_debug_exec:s0
 /vendor/bin/spx-rmtfs-prepare\.sh                   u:object_r:spx_debug_exec:s0
