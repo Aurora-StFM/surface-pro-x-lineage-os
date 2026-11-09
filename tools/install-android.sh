@@ -347,6 +347,9 @@ OPTIONS="$OPTIONS androidboot.serialno=$SERIAL"
 # Bring-up: when init hits a fatal error, panic instead of rebooting, and
 # leave the panic on screen (panic=0) so the last messages can be read.
 OPTIONS="$OPTIONS androidboot.init_fatal_panic=true panic=0 log_buf_len=4M"
+# Audio: keep AOSP's example audio HAL away from the real sound card until
+# routing for it exists; it uses virtual streams instead.
+OPTIONS="$OPTIONS androidboot.audio.tinyalsa.ignore_output=true androidboot.audio.tinyalsa.simulate_input=true"
 OPTIONS="$(echo "$OPTIONS" | tr -s ' ')"
 
 write_file() { # write_file PATH CONTENT

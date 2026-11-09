@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+    Copyright (C) 2026 surface-pro-x-lineage-os contributors
+    SPDX-License-Identifier: Apache-2.0
+
+    Audio policy for the Surface Pro X. AOSP's example audio HAL creates one
+    module per <module> listed here, so without this file it registers none
+    and audioserver (and with it system_server) waits forever.
+
+    For now the primary module does not touch the real sound card: the boot
+    entry sets androidboot.audio.tinyalsa.ignore_output and simulate_input,
+    which make the example HAL use virtual streams.
+-->
+<audioPolicyConfiguration version="7.0" xmlns:xi="http://www.w3.org/2001/XInclude">
+    <globalConfiguration speaker_drc_enabled="false"/>
+    <modules>
+        <xi:include href="primary_audio_policy_configuration.xml"/>
+        <xi:include href="r_submix_audio_policy_configuration.xml"/>
+    </modules>
+    <xi:include href="audio_policy_volumes.xml"/>
+    <xi:include href="default_volume_tables.xml"/>
+</audioPolicyConfiguration>
